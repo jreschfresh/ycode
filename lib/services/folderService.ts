@@ -88,7 +88,9 @@ export async function publishFolders(
     throw new Error('Supabase not configured');
   }
 
-  const isPublishingAll = folderIds.length === 0;
+  // Page-scoped publishes (pageIds given, no explicit folderIds) must stay scoped to the
+  // ancestors of those pages; only a call with neither folderIds nor pageIds publishes all folders.
+  const isPublishingAll = folderIds.length === 0 && !(pageIds && pageIds.length > 0);
   const folderIdsToPublish = new Set<string>(folderIds);
 
   // Collect ancestor folders if page IDs provided
@@ -240,4 +242,16 @@ export async function publishFolders(
   }
 
   return { count: foldersToUpsert.length };
+}
+
+/**
+ * Ancestor folder ids (draft, not soft-deleted) of the given pages.
+ * Exported so a page-scoped publish can scope folder translations too.
+ */
+export async function collectAncestorFolderIdsForPages(pageIds: string[]): Promise<Set<string>> {
+  const client = await getSupabaseAdmin();
+  if (!client) {
+    throw new Error('Supabase not configured');
+  }
+  return collectAncestorFolderIds(pageIds, client);
 }

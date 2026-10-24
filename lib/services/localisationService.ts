@@ -126,7 +126,13 @@ function buildSlugSnapshot(
  * Returns those diffs plus a `slugSnapshot` of pre-upsert published state so
  * downstream cache invalidation can reconstruct OLD URLs for slug renames.
  */
-export async function publishLocalisation(): Promise<PublishLocalisationResult> {
+export interface PublishLocalisationScope {
+  /** Only publish translations whose source is one of these pages (and the given folders). */
+  pageIds?: string[];
+  folderIds?: string[];
+}
+
+export async function publishLocalisation(scope?: PublishLocalisationScope): Promise<PublishLocalisationResult> {
   const client = await getSupabaseAdmin();
 
   if (!client) {
@@ -283,6 +289,14 @@ export async function publishLocalisation(): Promise<PublishLocalisationResult> 
   let allDraftTranslations: Translation[];
   try {
     allDraftTranslations = await getAllTranslationRows<Translation>(false);
+    if (scope) {
+      const scopedPages = new Set(scope.pageIds || []);
+      const scopedFolders = new Set(scope.folderIds || []);
+      allDraftTranslations = allDraftTranslations.filter((t: Translation) =>
+        (t.source_type === 'page' && scopedPages.has(t.source_id)) ||
+        (t.source_type === 'folder' && scopedFolders.has(t.source_id))
+      );
+    }
   } catch (translationsError) {
     const message = translationsError instanceof Error ? translationsError.message : String(translationsError);
     throw new Error(`Failed to fetch draft translations: ${message}`);

@@ -605,6 +605,53 @@ export async function POST(request: NextRequest) {
           // Silently handle - non-fatal
         }
       }
+    } else if (pageIds && pageIds.length > 0) {
+      // Page-scoped publish: additive only (no deletions). Publish what the selected pages
+      // need to render correctly: new/changed assets, fonts, locales, and the translations
+      // that belong to the selected pages and their ancestor folders.
+      try {
+        const unpublishedFolders = await getUnpublishedAssetFolders();
+        if (unpublishedFolders.length > 0) {
+          const foldersResult = await publishAssetFolders(unpublishedFolders.map((f: any) => f.id));
+          result.changes.assetFolders = foldersResult.count;
+          stats.tables.asset_folders.added = foldersResult.count;
+        }
+      } catch {
+        // non-fatal
+      }
+      try {
+        const unpublishedAssets = await getUnpublishedAssets();
+        if (unpublishedAssets.length > 0) {
+          const assetsResult = await publishAssets(unpublishedAssets.map((a: any) => a.id));
+          result.changes.assets = assetsResult.count;
+          stats.tables.assets.added = assetsResult.count;
+        }
+      } catch {
+        // non-fatal
+      }
+      try {
+        await publishFonts();
+      } catch {
+        // non-fatal
+      }
+      if (publishLocales) {
+        try {
+          const { collectAncestorFolderIdsForPages } = await import('@/lib/services/folderService');
+          const ancestorFolderIds = Array.from(await collectAncestorFolderIdsForPages(pageIds));
+          localisationResult = await publishLocalisation({
+            pageIds,
+            folderIds: [...(folderIds || []), ...ancestorFolderIds],
+          });
+          result.changes.locales = localisationResult.locales;
+          result.changes.translations = localisationResult.translations;
+          stats.tables.locales.added = localisationResult.locales;
+          stats.tables.locales.durationMs = localisationResult.timing.localesDurationMs;
+          stats.tables.translations.added = localisationResult.translations;
+          stats.tables.translations.durationMs = localisationResult.timing.translationsDurationMs;
+        } catch {
+          // non-fatal
+        }
+      }
     }
 
     // Copy draft CSS to published CSS
